@@ -1,18 +1,18 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dot_navigation_bar/dot_navigation_bar.dart';
-import 'package:flutter_osm_plugin/flutter_osm_plugin.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:getwidget/getwidget.dart';
-import 'package:location_tracker/app/app_colors.dart';
-import 'package:location_tracker/trip_model.dart';
-import 'package:location_tracker/utils/tile_servers.dart';
-import 'package:location_tracker/utils/utils.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:latlng/latlng.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:location_tracker/app/app_colors.dart';
+import 'package:location_tracker/trip_location_model.dart';
+import 'package:location_tracker/trip_location_updates_model.dart';
+import 'package:location_tracker/trip_model.dart';
 import 'package:uuid/uuid.dart';
 
 class MapScreen extends StatefulWidget {
@@ -33,39 +33,41 @@ class MapScreen extends StatefulWidget {
 }
 
 class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
-  final controller = MapController.withUserPosition(
-      trackUserLocation: UserTrackingOption(
-    enableTracking: true,
-    unFollowUser: false,
-  ));
+  static const _startedId = 'AnimatedMapController#MoveStarted';
+  static const _inProgressId = 'AnimatedMapController#MoveInProgress';
+  static const _finishedId = 'AnimatedMapController#MoveFinished';
+
   LatLng currentPosition = LatLng(0.0, 0.0);
+
   bool positionStreamStarted = false;
+  late final MapController mapController;
 
-  static const String _kLocationServicesDisabledMessage =
-      'Location services are disabled.';
-
-  static const String _kPermissionDeniedForeverMessage =
-      'Permission denied forever.';
-
-  static const String _kPermissionDeniedMessage = 'Permission denied.';
-  static const String _kPermissionGrantedMessage = 'Permission granted.';
-
-  Offset? _dragStart;
-  final GeolocatorPlatform _geolocatorPlatform = GeolocatorPlatform.instance;
   final GlobalKey<ScaffoldState> _key = GlobalKey(); // Create a key
-  final List<_PositionItem> _positionItems = <_PositionItem>[];
-  StreamSubscription<Position>? _positionStreamSubscription;
-  double _scaleStart = 1.0;
-  StreamSubscription<ServiceStatus>? _serviceStatusStreamSubscription;
 
   @override
   void dispose() {
-    if (_positionStreamSubscription != null) {
-      _positionStreamSubscription!.cancel();
-      _positionStreamSubscription = null;
-    }
-
     super.dispose();
+  }
+
+  CollectionReference trips = FirebaseFirestore.instance.collection('trips');
+  CollectionReference tripLocationUpdates =
+      FirebaseFirestore.instance.collection('tripLocationUpdataes');
+
+  Future<void> startTrip({required TripLocationModel tripLocationModel}) {
+    return trips
+        .doc(tripLocationModel.tripId)
+        .set(tripLocationModel.toMap())
+        .then((value) => print("Trip Added"))
+        .catchError((error) => print("Failed to add trip: $error"));
+  }
+
+  Future<void> saveTripLocationUpdates(
+      {required TripLocationUpdatesModel tripLocationUpdatesModel}) {
+    return tripLocationUpdates
+        .doc(tripLocationUpdatesModel.dateTime.toString())
+        .set(tripLocationUpdatesModel.toMap())
+        .then((value) => print("Trip Added"))
+        .catchError((error) => print("Failed to add trip: $error"));
   }
 
   var uuid = Uuid();
@@ -73,15 +75,284 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   String tripId = '';
   @override
   void initState() {
-    _getCurrentPosition();
-    tripId = uuid.v4();
     super.initState();
+    tripId = uuid.v4();
+    mapController = MapController();
+    requestLocationPermission();
   }
+
+  // StreamSubscription<Position> positionStream = Geolocator.getPositionStream(
+  //     locationSettings: LocationSettings(
+  //   accuracy: LocationAccuracy.high,
+  //   distanceFilter: 100,
+  // ));
+
+  // .listen(
+  //   (Position? position) {
+  //       print(position == null ? 'Unknown' : '${position.latitude.toString()}, ${position.longitude.toString()}');
+  //   });
+
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    // Create some tweens. These serve to split up the transition from one location to another.
+    // In our case, we want to split the transition be<tween> our current map center and the destination.
+    final camera = mapController.camera;
+    final latTween = Tween<double>(
+        begin: camera.center.latitude, end: destLocation.latitude);
+    final lngTween = Tween<double>(
+        begin: camera.center.longitude, end: destLocation.longitude);
+    final zoomTween = Tween<double>(begin: camera.zoom, end: destZoom);
+
+    // Create a animation controller that has a duration and a TickerProvider.
+    final controller = AnimationController(
+        duration: const Duration(milliseconds: 500), vsync: this);
+    // The animation determines what path the animation will take. You can try different Curves values, although I found
+    // fastOutSlowIn to be my favorite.
+    final Animation<double> animation =
+        CurvedAnimation(parent: controller, curve: Curves.fastOutSlowIn);
+
+    // Note this method of encoding the target destination is a workaround.
+    // When proper animated movement is supported (see #1263) we should be able
+    // to detect an appropriate animated movement event which contains the
+    // target zoom/center.
+    final startIdWithTarget =
+        '$_startedId#${destLocation.latitude},${destLocation.longitude},$destZoom';
+    bool hasTriggeredMove = false;
+
+    controller.addListener(() {
+      final String id;
+      if (animation.value == 1.0) {
+        id = _finishedId;
+      } else if (!hasTriggeredMove) {
+        id = startIdWithTarget;
+      } else {
+        id = _inProgressId;
+      }
+
+      hasTriggeredMove |= mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation),
+        id: id,
+      );
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        controller.dispose();
+      } else if (status == AnimationStatus.dismissed) {
+        controller.dispose();
+      }
+    });
+
+    controller.forward();
+  }
+
+  void requestLocationPermission() async {
+    await Geolocator.requestPermission();
+  }
+
+  Future<LatLng> getInitialLocation() async {
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    return LatLng(position.latitude, position.longitude);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Size screenSize = MediaQuery.of(context).size;
+
+    return Scaffold(
+        extendBody: true,
+        extendBodyBehindAppBar: true,
+        key: _key,
+        drawer: GFDrawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: <Widget>[
+              GFDrawerHeader(
+                currentAccountPicture: GFAvatar(
+                  radius: 80.0,
+                  backgroundImage: AssetImage('assets/nemsu_logo.png'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        body: FutureBuilder<LatLng>(
+          future: getInitialLocation(),
+          builder: (
+            BuildContext context,
+            AsyncSnapshot<LatLng> snapshot,
+          ) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator());
+            } else if (snapshot.connectionState == ConnectionState.done) {
+              if (snapshot.hasError) {
+                return const Text('Error');
+              } else if (snapshot.hasData) {
+                currentPosition = snapshot.data!;
+                startTrip(
+                    tripLocationModel: TripLocationModel(
+                  dateTime: DateTime.now().millisecondsSinceEpoch,
+                  tripId: tripId,
+                  driver: widget.name,
+                  from: widget.startLoc,
+                  to: widget.endLoc,
+                  startLat: currentPosition.latitude,
+                  startLon: currentPosition.longitude,
+                  status: 'started',
+                ));
+              }
+            } else {
+              return Text('State: ${snapshot.connectionState}');
+            }
+
+            return StreamBuilder<Position>(
+                stream: Geolocator.getPositionStream(
+                    locationSettings: const LocationSettings(
+                  accuracy: LocationAccuracy.bestForNavigation,
+                  distanceFilter: 50,
+                )),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    LatLng newLoc = LatLng(
+                        snapshot.data!.latitude, snapshot.data!.longitude);
+
+                    if (newLoc != currentPosition) {
+                      currentPosition = LatLng(
+                          snapshot.data!.latitude, snapshot.data!.longitude);
+                      saveTripLocationUpdates(
+                          tripLocationUpdatesModel: TripLocationUpdatesModel(
+                              dateTime: DateTime.now().millisecondsSinceEpoch,
+                              tripId: tripId,
+                              driver: widget.name,
+                              currentLat: currentPosition.latitude,
+                              currentLong: currentPosition.longitude,
+                              from: widget.startLoc,
+                              to: widget.endLoc));
+                    }
+
+                    // _animatedMapMove(currentPosition, 20);
+                  } else {}
+                  return FlutterMap(
+                    mapController: mapController,
+                    options: MapOptions(
+                      initialCenter: currentPosition,
+                      initialZoom: 18,
+                      cameraConstraint: CameraConstraint.contain(
+                        bounds: LatLngBounds(
+                          LatLng(-90, -180),
+                          LatLng(90, 180),
+                        ),
+                      ),
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName:
+                            'dev.fleaflet.flutter_map.example',
+                        tileUpdateTransformer:
+                            _animatedMoveTileUpdateTransformer,
+                      ),
+                      CurrentLocationLayer(
+                        followOnLocationUpdate: FollowOnLocationUpdate.always,
+                        turnOnHeadingUpdate: TurnOnHeadingUpdate.never,
+                        style: LocationMarkerStyle(
+                          marker: DefaultLocationMarker(
+                            color: AppColors.apPurple,
+                            child: Icon(
+                              Icons.navigation_sharp,
+                              color: AppColors.appWhite,
+                              size: 30,
+                            ),
+                          ),
+                          markerSize: Size(40, 40),
+                          markerDirection: MarkerDirection.heading,
+                        ),
+                      ),
+
+                      // MarkerLayer(markers: [
+                      //   Marker(
+                      //     width: 60,
+                      //     height: 60,
+                      //     point: currentPosition,
+                      //     child: Image.asset('assets/navigator_icon.png'),
+                      //   ),
+                      // ]),
+                    ],
+                  );
+                });
+          },
+        ),
+        bottomNavigationBar: Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: DotNavigationBar(
+              margin: EdgeInsets.only(left: 10, right: 10),
+              marginR: EdgeInsets.only(left: 20, right: 20),
+              paddingR: EdgeInsets.only(top: 5, bottom: 5),
+              dotIndicatorColor: Colors.purple,
+              unselectedItemColor: Colors.white,
+              selectedItemColor: Colors.white,
+              splashBorderRadius: 50,
+              // enableFloatingNavBar: false,
+              onTap: _handleTap,
+              backgroundColor: Colors.purple,
+
+              items: [
+                DotNavigationBarItem(
+                  icon: Icon(Icons.info_outline_rounded),
+                ),
+                DotNavigationBarItem(
+                  icon: Icon(Icons.navigation),
+                ),
+                DotNavigationBarItem(
+                  icon: Icon(Icons.account_circle_rounded),
+                ),
+                DotNavigationBarItem(
+                  icon: Icon(Icons.close_rounded),
+                ),
+              ],
+            )));
+  }
+
+  final _animatedMoveTileUpdateTransformer =
+      TileUpdateTransformer.fromHandlers(handleData: (updateEvent, sink) {
+    final mapEvent = updateEvent.mapEvent;
+
+    final id = mapEvent is MapEventMove ? mapEvent.id : null;
+    if (id?.startsWith(MapScreenState._startedId) == true) {
+      final parts = id!.split('#')[2].split(',');
+      final lat = double.parse(parts[0]);
+      final lon = double.parse(parts[1]);
+      final zoom = double.parse(parts[2]);
+
+      // When animated movement starts load tiles at the target location and do
+      // not prune. Disabling pruning means existing tiles will remain visible
+      // whilst animating.
+      sink.add(
+        updateEvent.loadOnly(
+          loadCenterOverride: LatLng(lat, lon),
+          loadZoomOverride: zoom,
+        ),
+      );
+    } else if (id == MapScreenState._inProgressId) {
+      // Do not prune or load whilst animating so that any existing tiles remain
+      // visible. A smarter implementation may start pruning once we are close to
+      // the target zoom/location.
+    } else if (id == MapScreenState._finishedId) {
+      // We already prefetched the tiles when animation started so just prune.
+      sink.add(updateEvent.pruneOnly());
+    } else {
+      sink.add(updateEvent);
+    }
+  });
 
   void _handleTap(int selectedTab) {
     print('DATAAAAAA: $selectedTab');
     if (selectedTab == 1) {
-      controller.centerMap;
+      _animatedMapMove(currentPosition, 20);
     } else if (selectedTab == 2) {
       final bool isDrawerOpen = _key.currentState!.isDrawerOpen;
       if (isDrawerOpen) {
@@ -90,7 +361,31 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
         _key.currentState!.openDrawer();
       }
     } else if (selectedTab == 3) {
-      Navigator.of(context).pop();
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text("Exit current trip"),
+            content: Text(
+                "You will be redirected to home. Location updates with the current trip will be stopped."),
+            actions: [
+              ElevatedButton(
+                child: Text("No"),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+              ElevatedButton(
+                child: Text("Yes"),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        },
+      );
     } else {
       showDialog(
         context: context,
@@ -223,347 +518,4 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     }
     ;
   }
-
-  Future<void> _getCurrentPosition() async {
-    final hasPermission = await _handlePermission();
-
-    if (!hasPermission) {
-      return;
-    }
-
-    final position = await _geolocatorPlatform.getCurrentPosition();
-    _updatePositionList(_PositionItemType.position, position.toString(),
-        position: position);
-    _toggleServiceStatusStream();
-  }
-
-  Future<bool> _handlePermission() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    // Test if location services are enabled.
-    serviceEnabled = await _geolocatorPlatform.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      // Location services are not enabled don't continue
-      // accessing the position and request users of the
-      // App to enable the location services.
-      _updatePositionList(
-        _PositionItemType.log,
-        _kLocationServicesDisabledMessage,
-      );
-
-      return false;
-    }
-
-    permission = await _geolocatorPlatform.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await _geolocatorPlatform.requestPermission();
-      if (permission == LocationPermission.denied) {
-        // Permissions are denied, next time you could try
-        // requesting permissions again (this is also where
-        // Android's shouldShowRequestPermissionRationale
-        // returned true. According to Android guidelines
-        // your App should show an explanatory UI now.
-        _updatePositionList(
-          _PositionItemType.log,
-          _kPermissionDeniedMessage,
-        );
-
-        return false;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      // Permissions are denied forever, handle appropriately.
-      _updatePositionList(
-        _PositionItemType.log,
-        _kPermissionDeniedForeverMessage,
-      );
-
-      return false;
-    }
-
-    // When we reach here, permissions are granted and we can
-    // continue accessing the position of the device.
-    _updatePositionList(
-      _PositionItemType.log,
-      _kPermissionGrantedMessage,
-    );
-
-    return true;
-  }
-
-  void _updatePositionList(_PositionItemType type, String displayValue,
-      {Position? position}) {
-    _positionItems.add(_PositionItem(type, displayValue));
-
-    if (type == _PositionItemType.log) {
-      print('LOCATION LOG:' + displayValue);
-    }
-
-    if (position != null) {
-      currentPosition = LatLng(position.latitude, position.longitude);
-      controller.centerMap;
-      print(position.toString());
-    }
-    setState(() {});
-  }
-
-  bool _isListening() => !(_positionStreamSubscription == null ||
-      _positionStreamSubscription!.isPaused);
-
-  Color _determineButtonColor() {
-    return _isListening() ? Colors.green : Colors.red;
-  }
-
-  void _toggleServiceStatusStream() {
-    if (_serviceStatusStreamSubscription == null) {
-      final serviceStatusStream = _geolocatorPlatform.getServiceStatusStream();
-      _serviceStatusStreamSubscription =
-          serviceStatusStream.handleError((error) {
-        _serviceStatusStreamSubscription?.cancel();
-        _serviceStatusStreamSubscription = null;
-        print('ERROR [_serviceStatusStreamSubscription]: $error');
-      }).listen((serviceStatus) {
-        String serviceStatusValue;
-        if (serviceStatus == ServiceStatus.enabled) {
-          if (positionStreamStarted) {
-            _toggleListening();
-          }
-          serviceStatusValue = 'enabled';
-        } else {
-          if (_positionStreamSubscription != null) {
-            setState(() {
-              _positionStreamSubscription?.cancel();
-              _positionStreamSubscription = null;
-              _updatePositionList(
-                  _PositionItemType.log, 'Position Stream has been canceled');
-            });
-          }
-          serviceStatusValue = 'disabled';
-        }
-        _updatePositionList(
-          _PositionItemType.log,
-          'Location service has been $serviceStatusValue',
-        );
-      });
-    }
-  }
-
-  void _toggleListening() {
-    if (_positionStreamSubscription == null) {
-      final positionStream = _geolocatorPlatform.getPositionStream();
-      _positionStreamSubscription = positionStream.handleError((error) {
-        _positionStreamSubscription?.cancel();
-        _positionStreamSubscription = null;
-      }).listen((position) => _updatePositionList(
-          _PositionItemType.position, position.toString(),
-          position: position));
-      _positionStreamSubscription?.pause();
-    }
-
-    setState(() {
-      if (_positionStreamSubscription == null) {
-        return;
-      }
-
-      String statusDisplayValue;
-      if (_positionStreamSubscription!.isPaused) {
-        _positionStreamSubscription!.resume();
-        statusDisplayValue = 'resumed';
-      } else {
-        _positionStreamSubscription!.pause();
-        statusDisplayValue = 'paused';
-      }
-
-      _updatePositionList(
-        _PositionItemType.log,
-        'Listening for position updates $statusDisplayValue',
-      );
-    });
-  }
-
-  void _getLastKnownPosition() async {
-    final position = await _geolocatorPlatform.getLastKnownPosition();
-    if (position != null) {
-      _updatePositionList(
-        _PositionItemType.position,
-        position.toString(),
-      );
-    } else {
-      _updatePositionList(
-        _PositionItemType.log,
-        'No last known position available',
-      );
-    }
-  }
-
-  void _getLocationAccuracy() async {
-    final status = await _geolocatorPlatform.getLocationAccuracy();
-    _handleLocationAccuracyStatus(status);
-  }
-
-  void _requestTemporaryFullAccuracy() async {
-    final status = await _geolocatorPlatform.requestTemporaryFullAccuracy(
-      purposeKey: "TemporaryPreciseAccuracy",
-    );
-    _handleLocationAccuracyStatus(status);
-  }
-
-  void _handleLocationAccuracyStatus(LocationAccuracyStatus status) {
-    String locationAccuracyStatusValue;
-    if (status == LocationAccuracyStatus.precise) {
-      locationAccuracyStatusValue = 'Precise';
-    } else if (status == LocationAccuracyStatus.reduced) {
-      locationAccuracyStatusValue = 'Reduced';
-    } else {
-      locationAccuracyStatusValue = 'Unknown';
-    }
-    _updatePositionList(
-      _PositionItemType.log,
-      '$locationAccuracyStatusValue location accuracy granted.',
-    );
-  }
-
-  void _openAppSettings() async {
-    final opened = await _geolocatorPlatform.openAppSettings();
-    String displayValue;
-
-    if (opened) {
-      displayValue = 'Opened Application Settings.';
-    } else {
-      displayValue = 'Error opening Application Settings.';
-    }
-
-    _updatePositionList(
-      _PositionItemType.log,
-      displayValue,
-    );
-  }
-
-  void _openLocationSettings() async {
-    final opened = await _geolocatorPlatform.openLocationSettings();
-    String displayValue;
-
-    if (opened) {
-      displayValue = 'Opened Location Settings';
-    } else {
-      displayValue = 'Error opening Location Settings';
-    }
-
-    _updatePositionList(
-      _PositionItemType.log,
-      displayValue,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final Size screenSize = MediaQuery.of(context).size;
-
-    Widget osmMap = OSMFlutter(
-        controller: controller,
-        osmOption: OSMOption(
-          userTrackingOption: UserTrackingOption(
-            enableTracking: true,
-            unFollowUser: false,
-          ),
-          zoomOption: ZoomOption(
-            initZoom: 8,
-            minZoomLevel: 3,
-            maxZoomLevel: 19,
-            stepZoom: 1.0,
-          ),
-          userLocationMarker: UserLocationMaker(
-            personMarker: MarkerIcon(
-              icon: Icon(
-                Icons.location_history_rounded,
-                color: Colors.red,
-                size: 48,
-              ),
-            ),
-            directionArrowMarker: MarkerIcon(
-              icon: Icon(
-                Icons.double_arrow,
-                size: 48,
-              ),
-            ),
-          ),
-          roadConfiguration: RoadOption(
-            roadColor: Colors.yellowAccent,
-          ),
-          markerOption: MarkerOption(
-              defaultMarker: MarkerIcon(
-            icon: Icon(
-              Icons.person_pin_circle,
-              color: Colors.blue,
-              size: 56,
-            ),
-          )),
-        ));
-
-    return Scaffold(
-        extendBody: true,
-        extendBodyBehindAppBar: true,
-        key: _key,
-        drawer: GFDrawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: <Widget>[
-              GFDrawerHeader(
-                currentAccountPicture: GFAvatar(
-                  radius: 80.0,
-                  backgroundImage: AssetImage('assets/nemsu_logo.png'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        body: Container(
-            height: screenSize.height, width: screenSize.width, child: osmMap),
-        bottomNavigationBar: Padding(
-            padding: EdgeInsets.only(bottom: 10),
-            child: DotNavigationBar(
-              margin: EdgeInsets.only(left: 10, right: 10),
-              marginR: EdgeInsets.only(left: 20, right: 20),
-              paddingR: EdgeInsets.only(top: 5, bottom: 5),
-              dotIndicatorColor: Colors.purple,
-              unselectedItemColor: Colors.white,
-              selectedItemColor: Colors.white,
-              splashBorderRadius: 50,
-              // enableFloatingNavBar: false,
-              onTap: (selectedTab) {
-                _handleTap(selectedTab);
-                setState(() {});
-              },
-              backgroundColor: Colors.purple,
-
-              items: [
-                DotNavigationBarItem(
-                  icon: Icon(Icons.info_outline_rounded),
-                ),
-                DotNavigationBarItem(
-                  icon: Icon(Icons.navigation),
-                ),
-                DotNavigationBarItem(
-                  icon: Icon(Icons.account_circle_rounded),
-                ),
-                DotNavigationBarItem(
-                  icon: Icon(Icons.close_rounded),
-                ),
-              ],
-            )));
-  }
-}
-
-enum _PositionItemType {
-  log,
-  position,
-}
-
-class _PositionItem {
-  _PositionItem(this.type, this.displayValue);
-
-  final String displayValue;
-  final _PositionItemType type;
 }
