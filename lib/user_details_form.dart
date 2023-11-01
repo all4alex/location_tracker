@@ -60,7 +60,10 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
           context,
           MaterialPageRoute(
             builder: (context) => MapScreen(
-                name: name, startLoc: startLoc, endLoc: endLoc, uuid: uuid),
+              name: name,
+              startLoc: startLoc,
+              endLoc: endLoc,
+            ),
           ));
     }).catchError((error) {
       AppToast.showErrorMessage(

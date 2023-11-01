@@ -75,32 +75,42 @@ class _IntroScreenState extends State<IntroScreen> {
     final Size screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.max,
-        children: [
-          Container(
-              alignment: Alignment.center,
-              height: 300,
-              child: Image.asset('assets/tracking_icon1.png')),
-          SizedBox(
-            height: 100,
+      body: Container(
+        decoration: BoxDecoration(
+          color: Colors.black12,
+          image: DecorationImage(
+            image: AssetImage("assets/nemsu_logo.png"),
+            opacity: .1,
+            fit: BoxFit.fitHeight,
           ),
-          Text('Welcome!',
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineMedium!
-                  .copyWith(fontWeight: FontWeight.bold)),
-          SizedBox(
-            height: 50,
-          ),
-          Text('Real-time GPS Tracker',
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineMedium!
-                  .copyWith(fontWeight: FontWeight.bold)),
-        ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Container(
+                alignment: Alignment.center,
+                height: 300,
+                child: Image.asset('assets/tracking_icon1.png')),
+            SizedBox(
+              height: 100,
+            ),
+            Text('Welcome!',
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium!
+                    .copyWith(fontWeight: FontWeight.bold)),
+            SizedBox(
+              height: 50,
+            ),
+            Text('Real-time GPS Tracker',
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium!
+                    .copyWith(fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
           heroTag: 'uniqueTag',

@@ -1,6 +1,8 @@
 // ignore_for_file: public_member_api_docs, sort_constructors_first
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 class TripLocationModel {
   final String? tripId;
   final String? driver;
@@ -10,6 +12,7 @@ class TripLocationModel {
   final double? startLon;
   final String? status;
   final int dateTime;
+  final List<String> locationUpdates;
   TripLocationModel({
     this.tripId,
     this.driver,
@@ -19,6 +22,7 @@ class TripLocationModel {
     this.startLon,
     this.status,
     required this.dateTime,
+    required this.locationUpdates,
   });
 
   TripLocationModel copyWith({
@@ -30,6 +34,7 @@ class TripLocationModel {
     double? startLon,
     String? status,
     int? dateTime,
+    List<String>? locationUpdates,
   }) {
     return TripLocationModel(
       tripId: tripId ?? this.tripId,
@@ -40,6 +45,7 @@ class TripLocationModel {
       startLon: startLon ?? this.startLon,
       status: status ?? this.status,
       dateTime: dateTime ?? this.dateTime,
+      locationUpdates: locationUpdates ?? this.locationUpdates,
     );
   }
 
@@ -53,20 +59,23 @@ class TripLocationModel {
       'startLon': startLon,
       'status': status,
       'dateTime': dateTime,
+      'locationUpdates': locationUpdates,
     };
   }
 
   factory TripLocationModel.fromMap(Map<String, dynamic> map) {
     return TripLocationModel(
-      tripId: map['tripId'] != null ? map['tripId'] as String : null,
-      driver: map['driver'] != null ? map['driver'] as String : null,
-      from: map['from'] != null ? map['from'] as String : null,
-      to: map['to'] != null ? map['to'] as String : null,
-      startLat: map['startLat'] != null ? map['startLat'] as double : null,
-      startLon: map['startLon'] != null ? map['startLon'] as double : null,
-      status: map['status'] != null ? map['status'] as String : null,
-      dateTime: map['dateTime'] as int,
-    );
+        tripId: map['tripId'] != null ? map['tripId'] as String : null,
+        driver: map['driver'] != null ? map['driver'] as String : null,
+        from: map['from'] != null ? map['from'] as String : null,
+        to: map['to'] != null ? map['to'] as String : null,
+        startLat: map['startLat'] != null ? map['startLat'] as double : null,
+        startLon: map['startLon'] != null ? map['startLon'] as double : null,
+        status: map['status'] != null ? map['status'] as String : null,
+        dateTime: map['dateTime'] as int,
+        locationUpdates: List<String>.from(
+          (map['locationUpdates'] as List<String>),
+        ));
   }
 
   String toJson() => json.encode(toMap());
@@ -76,7 +85,7 @@ class TripLocationModel {
 
   @override
   String toString() {
-    return 'TripLocationModel(tripId: $tripId, driver: $driver, from: $from, to: $to, startLat: $startLat, startLon: $startLon, status: $status, dateTime: $dateTime)';
+    return 'TripLocationModel(tripId: $tripId, driver: $driver, from: $from, to: $to, startLat: $startLat, startLon: $startLon, status: $status, dateTime: $dateTime, locationUpdates: $locationUpdates)';
   }
 
   @override
@@ -90,7 +99,8 @@ class TripLocationModel {
         other.startLat == startLat &&
         other.startLon == startLon &&
         other.status == status &&
-        other.dateTime == dateTime;
+        other.dateTime == dateTime &&
+        listEquals(other.locationUpdates, locationUpdates);
   }
 
   @override
@@ -102,6 +112,7 @@ class TripLocationModel {
         startLat.hashCode ^
         startLon.hashCode ^
         status.hashCode ^
-        dateTime.hashCode;
+        dateTime.hashCode ^
+        locationUpdates.hashCode;
   }
 }

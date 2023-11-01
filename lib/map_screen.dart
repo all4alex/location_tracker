@@ -19,14 +19,12 @@ class MapScreen extends StatefulWidget {
   final String name;
   final String startLoc;
   final String endLoc;
-  final String uuid;
 
   const MapScreen(
       {super.key,
       required this.name,
       required this.startLoc,
-      required this.endLoc,
-      required this.uuid});
+      required this.endLoc});
 
   @override
   MapScreenState createState() => MapScreenState();
@@ -51,32 +49,39 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
 
   CollectionReference trips = FirebaseFirestore.instance.collection('trips');
   CollectionReference tripLocationUpdates =
-      FirebaseFirestore.instance.collection('tripLocationUpdataes');
+      FirebaseFirestore.instance.collection('tripLocationUpdates');
 
   Future<void> startTrip({required TripLocationModel tripLocationModel}) {
     return trips
         .doc(tripLocationModel.tripId)
         .set(tripLocationModel.toMap())
-        .then((value) => print("Trip Added"))
+        .then((value) {})
         .catchError((error) => print("Failed to add trip: $error"));
   }
 
   Future<void> saveTripLocationUpdates(
-      {required TripLocationUpdatesModel tripLocationUpdatesModel}) {
-    return tripLocationUpdates
+      {required TripLocationUpdatesModel tripLocationUpdatesModel}) async {
+    await tripLocationUpdates
         .doc(tripLocationUpdatesModel.dateTime.toString())
         .set(tripLocationUpdatesModel.toMap())
-        .then((value) => print("Trip Added"))
+        .then((value) {
+      print("Trip Added");
+      locationUpdates.add(tripLocationUpdatesModel.dateTime.toString());
+    }).catchError((error) => print("Failed to add trip: $error"));
+    await trips
+        .doc(tripLocationUpdatesModel.tripId)
+        .set({'locationUpdates', locationUpdates})
+        .then((value) {})
         .catchError((error) => print("Failed to add trip: $error"));
+    return;
   }
 
-  var uuid = Uuid();
-
   String tripId = '';
+  List<String> locationUpdates = [];
   @override
   void initState() {
     super.initState();
-    tripId = uuid.v4();
+    tripId = DateTime.now().millisecondsSinceEpoch.toString();
     mapController = MapController();
     requestLocationPermission();
   }
@@ -154,6 +159,18 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     Position position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
+    await startTrip(
+        tripLocationModel: TripLocationModel(
+      dateTime: DateTime.now().millisecondsSinceEpoch,
+      driver: widget.name,
+      from: widget.startLoc,
+      to: widget.endLoc,
+      startLat: position.latitude,
+      startLon: position.longitude,
+      status: 'started',
+      tripId: tripId,
+      locationUpdates: locationUpdates,
+    ));
 
     return LatLng(position.latitude, position.longitude);
   }
@@ -192,17 +209,6 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                 return const Text('Error');
               } else if (snapshot.hasData) {
                 currentPosition = snapshot.data!;
-                startTrip(
-                    tripLocationModel: TripLocationModel(
-                  dateTime: DateTime.now().millisecondsSinceEpoch,
-                  tripId: tripId,
-                  driver: widget.name,
-                  from: widget.startLoc,
-                  to: widget.endLoc,
-                  startLat: currentPosition.latitude,
-                  startLon: currentPosition.longitude,
-                  status: 'started',
-                ));
               }
             } else {
               return Text('State: ${snapshot.connectionState}');
@@ -224,13 +230,14 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                           snapshot.data!.latitude, snapshot.data!.longitude);
                       saveTripLocationUpdates(
                           tripLocationUpdatesModel: TripLocationUpdatesModel(
-                              dateTime: DateTime.now().millisecondsSinceEpoch,
-                              tripId: tripId,
-                              driver: widget.name,
-                              currentLat: currentPosition.latitude,
-                              currentLong: currentPosition.longitude,
-                              from: widget.startLoc,
-                              to: widget.endLoc));
+                        dateTime: DateTime.now().millisecondsSinceEpoch,
+                        tripId: tripId,
+                        driver: widget.name,
+                        currentLat: currentPosition.latitude,
+                        currentLong: currentPosition.longitude,
+                        from: widget.startLoc,
+                        to: widget.endLoc,
+                      ));
                     }
 
                     // _animatedMapMove(currentPosition, 20);
