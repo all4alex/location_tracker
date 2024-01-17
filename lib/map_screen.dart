@@ -10,6 +10,7 @@ import 'package:getwidget/getwidget.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location_tracker/app/app_colors.dart';
+import 'package:location_tracker/passenger_counter.dart';
 import 'package:location_tracker/trip_location_model.dart';
 import 'package:location_tracker/trip_location_updates_model.dart';
 import 'package:location_tracker/trip_model.dart';
@@ -19,12 +20,15 @@ class MapScreen extends StatefulWidget {
   final String name;
   final String startLoc;
   final String endLoc;
+  final int maxPassenger;
 
-  const MapScreen(
-      {super.key,
-      required this.name,
-      required this.startLoc,
-      required this.endLoc});
+  const MapScreen({
+    super.key,
+    required this.name,
+    required this.startLoc,
+    required this.endLoc,
+    required this.maxPassenger,
+  });
 
   @override
   MapScreenState createState() => MapScreenState();
@@ -74,6 +78,20 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
         .then((value) {})
         .catchError((error) => print("Failed to add trip: $error"));
     return;
+  }
+
+  Future<void> updatePassengerCount(int count, String tripId) async {
+    return await trips
+        .doc(tripId)
+        .set(
+          {
+            'onboardPassengerCount': count,
+          },
+          SetOptions(merge: true),
+        )
+        .then(
+            (value) => print("'full_name' & 'age' merged with existing data!"))
+        .catchError((error) => print("Failed to merge data: $error"));
   }
 
   String tripId = '';
@@ -161,16 +179,17 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     );
     await startTrip(
         tripLocationModel: TripLocationModel(
-      dateTime: DateTime.now().millisecondsSinceEpoch,
-      driver: widget.name,
-      from: widget.startLoc,
-      to: widget.endLoc,
-      startLat: position.latitude,
-      startLon: position.longitude,
-      status: 'started',
-      tripId: tripId,
-      locationUpdates: locationUpdates,
-    ));
+            dateTime: DateTime.now().millisecondsSinceEpoch,
+            driver: widget.name,
+            from: widget.startLoc,
+            to: widget.endLoc,
+            startLat: position.latitude,
+            startLon: position.longitude,
+            status: 'started',
+            tripId: tripId,
+            locationUpdates: locationUpdates,
+            maxPassengerCount: widget.maxPassenger,
+            onboardPassengerCount: 0));
 
     return LatLng(position.latitude, position.longitude);
   }
@@ -230,14 +249,15 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                           snapshot.data!.latitude, snapshot.data!.longitude);
                       saveTripLocationUpdates(
                           tripLocationUpdatesModel: TripLocationUpdatesModel(
-                        dateTime: DateTime.now().millisecondsSinceEpoch,
-                        tripId: tripId,
-                        driver: widget.name,
-                        currentLat: currentPosition.latitude,
-                        currentLong: currentPosition.longitude,
-                        from: widget.startLoc,
-                        to: widget.endLoc,
-                      ));
+                              dateTime: DateTime.now().millisecondsSinceEpoch,
+                              tripId: tripId,
+                              driver: widget.name,
+                              currentLat: currentPosition.latitude,
+                              currentLong: currentPosition.longitude,
+                              from: widget.startLoc,
+                              to: widget.endLoc,
+                              maxPassengerCount: widget.maxPassenger,
+                              onboardPassengerCount: 0));
                     }
 
                     // _animatedMapMove(currentPosition, 20);
@@ -279,6 +299,14 @@ class MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                           markerDirection: MarkerDirection.heading,
                         ),
                       ),
+                      Align(
+                          alignment: Alignment.bottomRight,
+                          child: CounterWidget(
+                            max: widget.maxPassenger,
+                            onUpdateCount: (int count) async {
+                              await updatePassengerCount(count, tripId);
+                            },
+                          )),
 
                       // MarkerLayer(markers: [
                       //   Marker(

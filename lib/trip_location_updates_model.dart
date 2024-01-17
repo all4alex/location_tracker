@@ -10,6 +10,8 @@ class TripLocationUpdatesModel {
   final double? currentLat;
   final double? currentLong;
   final int dateTime;
+  final int onboardPassengerCount;
+  final int maxPassengerCount;
   TripLocationUpdatesModel({
     this.tripId,
     this.driver,
@@ -18,6 +20,8 @@ class TripLocationUpdatesModel {
     this.currentLat,
     this.currentLong,
     required this.dateTime,
+    required this.onboardPassengerCount,
+    required this.maxPassengerCount,
   });
 
   Map<String, dynamic> toMap() {
@@ -29,6 +33,8 @@ class TripLocationUpdatesModel {
       'currentLat': currentLat,
       'currentLong': currentLong,
       'dateTime': dateTime,
+      'onboardPassengerCount': onboardPassengerCount,
+      'maxPassengerCount': maxPassengerCount,
     };
   }
 
@@ -43,6 +49,8 @@ class TripLocationUpdatesModel {
       currentLong:
           map['currentLong'] != null ? map['currentLong'] as double : null,
       dateTime: map['dateTime'] as int,
+      onboardPassengerCount: map['onboardPassengerCount'] as int,
+      maxPassengerCount: map['maxPassengerCount'] as int,
     );
   }
 
@@ -51,4 +59,62 @@ class TripLocationUpdatesModel {
   factory TripLocationUpdatesModel.fromJson(String source) =>
       TripLocationUpdatesModel.fromMap(
           json.decode(source) as Map<String, dynamic>);
+
+  TripLocationUpdatesModel copyWith({
+    String? tripId,
+    String? driver,
+    String? from,
+    String? to,
+    double? currentLat,
+    double? currentLong,
+    int? dateTime,
+    int? onboardPassengerCount,
+    int? maxPassengerCount,
+  }) {
+    return TripLocationUpdatesModel(
+      tripId: tripId ?? this.tripId,
+      driver: driver ?? this.driver,
+      from: from ?? this.from,
+      to: to ?? this.to,
+      currentLat: currentLat ?? this.currentLat,
+      currentLong: currentLong ?? this.currentLong,
+      dateTime: dateTime ?? this.dateTime,
+      onboardPassengerCount:
+          onboardPassengerCount ?? this.onboardPassengerCount,
+      maxPassengerCount: maxPassengerCount ?? this.maxPassengerCount,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'TripLocationUpdatesModel(tripId: $tripId, driver: $driver, from: $from, to: $to, currentLat: $currentLat, currentLong: $currentLong, dateTime: $dateTime, onboardPassengerCount: $onboardPassengerCount, maxPassengerCount: $maxPassengerCount)';
+  }
+
+  @override
+  bool operator ==(covariant TripLocationUpdatesModel other) {
+    if (identical(this, other)) return true;
+
+    return other.tripId == tripId &&
+        other.driver == driver &&
+        other.from == from &&
+        other.to == to &&
+        other.currentLat == currentLat &&
+        other.currentLong == currentLong &&
+        other.dateTime == dateTime &&
+        other.onboardPassengerCount == onboardPassengerCount &&
+        other.maxPassengerCount == maxPassengerCount;
+  }
+
+  @override
+  int get hashCode {
+    return tripId.hashCode ^
+        driver.hashCode ^
+        from.hashCode ^
+        to.hashCode ^
+        currentLat.hashCode ^
+        currentLong.hashCode ^
+        dateTime.hashCode ^
+        onboardPassengerCount.hashCode ^
+        maxPassengerCount.hashCode;
+  }
 }

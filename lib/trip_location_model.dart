@@ -12,7 +12,10 @@ class TripLocationModel {
   final double? startLon;
   final String? status;
   final int dateTime;
+  final int onboardPassengerCount;
+  final int maxPassengerCount;
   final List<String> locationUpdates;
+
   TripLocationModel({
     this.tripId,
     this.driver,
@@ -22,6 +25,8 @@ class TripLocationModel {
     this.startLon,
     this.status,
     required this.dateTime,
+    required this.onboardPassengerCount,
+    required this.maxPassengerCount,
     required this.locationUpdates,
   });
 
@@ -34,6 +39,8 @@ class TripLocationModel {
     double? startLon,
     String? status,
     int? dateTime,
+    int? onboardPassengerCount,
+    int? maxPassengerCount,
     List<String>? locationUpdates,
   }) {
     return TripLocationModel(
@@ -45,6 +52,9 @@ class TripLocationModel {
       startLon: startLon ?? this.startLon,
       status: status ?? this.status,
       dateTime: dateTime ?? this.dateTime,
+      onboardPassengerCount:
+          onboardPassengerCount ?? this.onboardPassengerCount,
+      maxPassengerCount: maxPassengerCount ?? this.maxPassengerCount,
       locationUpdates: locationUpdates ?? this.locationUpdates,
     );
   }
@@ -59,6 +69,8 @@ class TripLocationModel {
       'startLon': startLon,
       'status': status,
       'dateTime': dateTime,
+      'onboardPassengerCount': onboardPassengerCount,
+      'maxPassengerCount': maxPassengerCount,
       'locationUpdates': locationUpdates,
     };
   }
@@ -73,6 +85,8 @@ class TripLocationModel {
         startLon: map['startLon'] != null ? map['startLon'] as double : null,
         status: map['status'] != null ? map['status'] as String : null,
         dateTime: map['dateTime'] as int,
+        onboardPassengerCount: map['onboardPassengerCount'] as int,
+        maxPassengerCount: map['maxPassengerCount'] as int,
         locationUpdates: List<String>.from(
           (map['locationUpdates'] as List<String>),
         ));
@@ -85,7 +99,7 @@ class TripLocationModel {
 
   @override
   String toString() {
-    return 'TripLocationModel(tripId: $tripId, driver: $driver, from: $from, to: $to, startLat: $startLat, startLon: $startLon, status: $status, dateTime: $dateTime, locationUpdates: $locationUpdates)';
+    return 'TripLocationModel(tripId: $tripId, driver: $driver, from: $from, to: $to, startLat: $startLat, startLon: $startLon, status: $status, dateTime: $dateTime, onboardPassengerCount: $onboardPassengerCount, maxPassengerCount: $maxPassengerCount, locationUpdates: $locationUpdates)';
   }
 
   @override
@@ -100,6 +114,8 @@ class TripLocationModel {
         other.startLon == startLon &&
         other.status == status &&
         other.dateTime == dateTime &&
+        other.onboardPassengerCount == onboardPassengerCount &&
+        other.maxPassengerCount == maxPassengerCount &&
         listEquals(other.locationUpdates, locationUpdates);
   }
 
@@ -113,6 +129,8 @@ class TripLocationModel {
         startLon.hashCode ^
         status.hashCode ^
         dateTime.hashCode ^
+        onboardPassengerCount.hashCode ^
+        maxPassengerCount.hashCode ^
         locationUpdates.hashCode;
   }
 }

@@ -21,6 +21,8 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
   String startLoc = '';
   String endLoc = '';
   String uuid = '';
+  int maxPassengerCapacity = 0;
+
   bool isLoading = false;
   // Create a CollectionReference called users that references the firestore collection
   late CollectionReference users;
@@ -36,7 +38,8 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
   Future<void> addUser(
       {required String name,
       required String startLoc,
-      required String endLoc}) {
+      required String endLoc,
+      required int maxPassengerCapacity}) {
     // Call the user's CollectionReference to add a new user
     return users
         .add(TripModel(
@@ -44,7 +47,9 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
                 driver: name,
                 from: startLoc,
                 to: endLoc,
-                tripId: uuid)
+                tripId: uuid,
+                onboardPassengerCount: 0,
+                maxPassengerCount: maxPassengerCapacity)
             .toMap())
         .then((value) {
       print("User Added");
@@ -60,10 +65,10 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
           context,
           MaterialPageRoute(
             builder: (context) => MapScreen(
-              name: name,
-              startLoc: startLoc,
-              endLoc: endLoc,
-            ),
+                name: name,
+                startLoc: startLoc,
+                endLoc: endLoc,
+                maxPassenger: maxPassengerCapacity),
           ));
     }).catchError((error) {
       AppToast.showErrorMessage(
@@ -82,7 +87,12 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
               children: [
                 FormBuilderTextField(
                   name: 'Name',
-                  decoration: const InputDecoration(labelText: 'Full Name'),
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(15)),
+                    ),
+                  ),
                   validator: FormBuilderValidators.compose([
                     FormBuilderValidators.required(),
                   ]),
@@ -90,8 +100,12 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
                 const SizedBox(height: 10),
                 FormBuilderTextField(
                   name: 'Start',
-                  decoration:
-                      const InputDecoration(labelText: 'Start location'),
+                  decoration: const InputDecoration(
+                    labelText: 'Start location',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(15)),
+                    ),
+                  ),
                   validator: FormBuilderValidators.compose([
                     FormBuilderValidators.required(),
                   ]),
@@ -99,10 +113,29 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
                 const SizedBox(height: 10),
                 FormBuilderTextField(
                   name: 'Target',
-                  decoration:
-                      const InputDecoration(labelText: 'Target destination'),
+                  decoration: const InputDecoration(
+                    labelText: 'Target destination',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(15)),
+                    ),
+                  ),
                   validator: FormBuilderValidators.compose([
                     FormBuilderValidators.required(),
+                  ]),
+                ),
+                const SizedBox(height: 10),
+                FormBuilderTextField(
+                  name: 'MaxPassengerCapacity',
+                  decoration: const InputDecoration(
+                    labelText: 'Max passenger capacity',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(15)),
+                    ),
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: FormBuilderValidators.compose([
+                    FormBuilderValidators.required(),
+                    FormBuilderValidators.numeric()
                   ]),
                 ),
                 const SizedBox(height: 10),
@@ -116,8 +149,14 @@ class _UserDetailsFormState extends State<UserDetailsForm> {
                     name = _formKey.currentState?.fields['Name']?.value;
                     startLoc = _formKey.currentState?.fields['Start']?.value;
                     endLoc = _formKey.currentState?.fields['Target']?.value;
+                    maxPassengerCapacity = int.parse(_formKey
+                        .currentState?.fields['MaxPassengerCapacity']?.value);
+
                     await addUser(
-                        name: name, startLoc: startLoc, endLoc: endLoc);
+                        name: name,
+                        startLoc: startLoc,
+                        endLoc: endLoc,
+                        maxPassengerCapacity: maxPassengerCapacity);
                   },
                   child: isLoading
                       ? SizedBox(
